@@ -1,0 +1,102 @@
+from complex import ComplexFloat64
+from tensor import Tensor
+from utils.index import Index
+from python import Python
+
+
+struct Settings:
+    var float_type: DType
+    var height_pixels: Int
+    var width_pixels: Int
+    var max_iters: Int
+    var center: ComplexFloat64
+    var window_shape: ComplexFloat64
+    
+    var min_x: Float64
+    var max_x: Float64
+    var min_y: Float64
+    var max_y: Float64
+
+    fn __init__(inout self):
+        self.float_type = DType.float64
+        self.height_pixels = 1001
+        self.width_pixels = 1001
+        self.max_iters = 100
+        self.center = ComplexFloat64(0, 0)
+        self.window_shape = ComplexFloat64(4, 4)
+
+    fn set_window_bounds(self) -> None:
+        self.min_x = (self.center + -self.window_shape * ComplexFloat64(1/2, 0)).re
+        self.max_x = (self.center + self.window_shape * ComplexFloat64(1/2, 0)).re
+        self.min_y = (self.center + -self.window_shape * ComplexFloat64(1/2, 0)).im
+        self.max_y = (self.center + self.window_shape * ComplexFloat64(1/2, 0)).im
+
+
+
+def mandelbrot_kernel(c: ComplexFloat64) -> Int:
+    z = ComplexFloat64(0, 0)
+    for i in range(MAX_ITERS):
+        z = z * z + c
+        if z.squared_norm() > 4:
+            return i
+        
+    return MAX_ITERS
+
+
+def compute_mandelbrot() -> Tensor[float_type]:
+    t = Tensor[float_type](height_pixels, width_pixels)
+
+    dx = (max_x - min_x) / (width_pixels - 1)
+    dy = (max_y - min_y) / (height_pixels - 1)
+
+    y = min_y
+    for row in range(height_pixels):
+        x = min_x
+        for col in range(width_pixels):
+            t[Index(row, col)] = mandelbrot_kernel(ComplexFloat64(x, y))
+            x += dx
+        y += dy
+    return t
+
+
+def plot(t: Tensor[float_type]):
+    time = Python.import_module('time')
+    t0 = time.time()
+    np = Python.import_module('numpy')
+    pil = Python.import_module('PIL')
+    mat = Python.import_module('matplotlib')
+    t1 = time.time()
+    print('Import libraries:', t1-t0)
+
+    numpy_array = np.zeros((height_pixels, width_pixels), np.float64)
+    t0 = t1
+    t1 = time.time()
+    print('Make np array:', t1-t0)
+
+    for row in range(height_pixels):
+        for col in range(width_pixels):
+            numpy_array.itemset((col, row), t[col, row])
+    t0 = t1
+    t1 = time.time()
+    print('Populate np arrays:', t1-t0)
+
+
+    array = numpy_array / MAX_ITERS
+    im = pil.Image.fromarray(np.uint8(mat.cm.gist_earth(array)*255))
+    print('Make image:', t1-t0)
+
+    im.save('image.png')
+    t0 = t1
+    t1 = time.time()
+    print('Save image:', t1-t0)
+
+
+def main():
+    time = Python.import_module('time')
+
+    t0 = time.time()
+    t = compute_mandelbrot()
+    t1 = time.time()
+
+    print('Time to calculate mandelbrot:', t1-t0, 's')
+    plot(t)
